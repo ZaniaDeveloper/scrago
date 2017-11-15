@@ -1,0 +1,2 @@
+# scrago
+Scraper for Go
