@@ -18,28 +18,41 @@ type Spider struct {
 	Parse     ParseFunc
 }
 
-func get_doc_from_filename(fname string) (*goquery.Document, error) {
-	f, err := os.OpenFile(fname, os.O_RDONLY, 0444)
+func get_doc(doc *goquery.Document, err error) *goquery.Document {
 	if err != nil {
-		return nil, err
+		panic(err)
+	}
+
+	return doc
+}
+
+func get_doc_from_filename(urlString string) *goquery.Document {
+	u, err := url.Parse(urlString)
+	if err != nil {
+		panic(err)
+	}
+
+	f, err := os.OpenFile(u.Path, os.O_RDONLY, 0444)
+	if err != nil {
+		panic(err)
 	}
 
 	defer f.Close()
 
-	return goquery.NewDocumentFromReader(f)
+	return get_doc(goquery.NewDocumentFromReader(f))
 }
 
-func get_doc_from_url(urlString string) (*goquery.Document, error) {
-	return goquery.NewDocument(urlString)
+func get_doc_from_url(urlString string) *goquery.Document {
+	return get_doc(goquery.NewDocument(urlString))
 }
 
-func run_scrape(urlString string, c chan<- Record, parser ParseFunc) error {
+func run_scrape(urlString string, c chan<- Record, parser ParseFunc) {
 	u, err := url.Parse(urlString)
 	if err != nil {
-		return err
+		panic(err)
 	}
 
-	var doc_getter func(string) (*goquery.Document, error)
+	var doc_getter func(string) *goquery.Document
 
 	if u.Scheme == "file" {
 		doc_getter = get_doc_from_filename
@@ -47,14 +60,7 @@ func run_scrape(urlString string, c chan<- Record, parser ParseFunc) error {
 		doc_getter = get_doc_from_url
 	}
 
-	doc, err := doc_getter(urlString)
-	if err != nil {
-		return err
-	}
-
-	parser(doc, c)
-
-	return nil
+	parser(doc_getter(urlString), c)
 }
 
 func RunSpider(spider Spider) {
@@ -67,13 +73,13 @@ func RunSpider(spider Spider) {
 		}
 	}()
 
-	for _, u := range spider.StartURLs {
-		if err := run_scrape(u, c, spider.Parse); err != nil {
-			panic(err)
-		}
-	}
+	func() {
+		defer close(c)
 
-	close(c)
+		for _, u := range spider.StartURLs {
+			run_scrape(u, c, spider.Parse)
+		}
+	}()
 
 	enc := json.NewEncoder(os.Stdout)
 	if err := enc.Encode(records); err != nil {
