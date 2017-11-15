@@ -80,3 +80,9 @@ func RunSpider(spider Spider) {
 		panic(err)
 	}
 }
+
+func Attr(sel *goquery.Selection, name string) string {
+	res, _ := sel.Attr(name)
+
+	return res
+}
